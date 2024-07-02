@@ -1,0 +1,22 @@
+pipeline {
+    agent { label 'project-jenkins-slave' }
+    /*options {
+        // Timeout counter starts AFTER agent is allocated
+        timeout(time: 1, unit: 'SECONDS')
+    }*/
+    stages {
+          stage('Clean Up') {
+            steps {
+              sh '''
+              aws ecr batch-delete-image \
+                --repository-name project-ecr-repo \
+                --image-ids imageTag=1.0.0 imageTag=2.0.0 imageTag=3.0.0 imageTag=4.0.0 imageTag=5.0.0|| :
+              docker rmi -f $(docker images -aq) || :
+              rm /home/ec2-user/workspace/project-app/target/project-app.war || :
+              cd helm-charts/project-app/ || :
+              helm uninstall project-app || :
+              '''
+            }
+          }
+    }
+}

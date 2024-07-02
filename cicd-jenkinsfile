@@ -1,0 +1,37 @@
+pipeline:
+  agent: project-jenkins-slave
+  environment:
+    TAG_VERSION: '4.0.0'
+    REGISTRY_PATH: '575199628479.dkr.ecr.us-east-1.amazonaws.com'
+    ECR_REPO_FULL_NAME: '575199628479.dkr.ecr.us-east-1.amazonaws.com/project-ecr-repo'
+    WAR_FULL_PATH: '/home/ec2-user/workspace/project-app/target/project-app.war'
+    TMP_IMAGE_NAME: 'project-app'
+    ECR_REPO_NAME: 'project-ecr-repo'
+    REGION: 'us-east-1'
+  stages:
+    - name: "Maven Build"
+      steps:
+        - command: "mvn clean install"
+
+    - name: "Docker Build"
+      steps:
+        - command: |
+            cp ${WAR_FULL_PATH} .
+            docker build -t ${TMP_IMAGE_NAME}:${TAG_VERSION} .
+
+    - name: "Docker Tag and Push to ECR"
+      steps:
+        - command: |
+            aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${REGISTRY_PATH}
+            export IMAGE_ID=$(sudo docker images --filter=reference=${TMP_IMAGE_NAME} --format "{{.ID}}")
+            echo $IMAGE_ID
+            docker tag ${IMAGE_ID} ${REGISTRY_PATH}/${ECR_REPO_NAME}:${TAG_VERSION}
+            docker push ${ECR_REPO_FULL_NAME}:${TAG_VERSION}
+
+    - name: "Helm Deploy"
+      steps:
+        - command: |
+            cd helm-charts
+            sed -i "s/replace_image_tag/${TAG_VERSION}/g" values.yaml
+            helm upgrade --install project-app .
+            kubectl get svc
